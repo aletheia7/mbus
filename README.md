@@ -1,9 +1,11 @@
 [![](https://img.shields.io/badge/godoc-reference-blue.svg)](https://godoc.org/github.com/aletheia7/mbus) 
 
 #### Installation
-
+Linux only because of the sd package. sd logs to the systemd journal. sd is only used in one place.
+```sh
 go get github.com/aletheia7/sd
 go get github.com/k-sone/critbitgo
+```
 
 #### License 
 
