@@ -22,11 +22,12 @@ const (
 )
 
 type Bus struct {
-	ctx      context.Context
-	ch       chan *Msg
-	subch    chan *subscription
-	topic_ct int64
-	trie     *critbitgo.Trie
+	Drop_slow_consumers bool
+	ctx                 context.Context
+	ch                  chan *Msg
+	subch               chan *subscription
+	topic_ct            int64
+	trie                *critbitgo.Trie
 }
 
 func New_bus(ctx context.Context) *Bus {
@@ -60,21 +61,30 @@ func (o *Bus) pub(m *Msg) {
 			case <-o.ctx.Done():
 				return
 			default:
-				select {
-				case <-o.ctx.Done():
-					return
-				case ch <- m:
-				default:
-					// ch: slow consumer or no chan receiver
+				if o.Drop_slow_consumers {
 					select {
 					case <-o.ctx.Done():
 						return
 					case ch <- m:
-					case <-time.After(pub_timer_fail):
-						if v, ok := o.trie.Get([]byte(m.Topic)); ok && v.(map[chan *Msg]bool)[ch] {
-							j.Warning("cannot pub, increase chan size:", len(ch), ch, m.Topic)
-							o.do_sub(&subscription{topics: []string{m.Topic}, c: ch})
+					default:
+						// ch: slow consumer or no chan receiver
+						select {
+						case <-o.ctx.Done():
+							return
+						case ch <- m:
+						case <-time.After(pub_timer_fail):
+							if v, ok := o.trie.Get([]byte(m.Topic)); ok && v.(map[chan *Msg]bool)[ch] {
+								j.Warning("cannot pub, increase chan size:", len(ch), ch, m.Topic)
+								o.do_sub(&subscription{topics: []string{m.Topic}, c: ch})
+							}
 						}
+					}
+				} else {
+					select {
+					case <-o.ctx.Done():
+						return
+					default:
+						ch <- m
 					}
 				}
 			}
