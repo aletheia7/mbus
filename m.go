@@ -24,18 +24,16 @@ const (
 type Bus struct {
 	Drop_slow_consumers bool
 	ctx                 context.Context
-	ch                  chan *Msg
-	subch               chan *subscription
+	ch                  chan interface{}
 	topic_ct            int64
 	trie                *critbitgo.Trie
 }
 
 func New_bus(ctx context.Context) *Bus {
 	r := &Bus{
-		ctx:   ctx,
-		ch:    make(chan *Msg, 256),
-		subch: make(chan *subscription, 256),
-		trie:  critbitgo.NewTrie(),
+		ctx:  ctx,
+		ch:   make(chan interface{}, 256),
+		trie: critbitgo.NewTrie(),
 	}
 	go r.loop()
 	return r
@@ -48,15 +46,6 @@ func (o *Bus) Next() string {
 func (o *Bus) pub(m *Msg) {
 	if v, ok := o.trie.Get([]byte(m.Topic)); ok {
 		for ch := range v.(map[chan *Msg]bool) {
-			for {
-				select {
-				case sub := <-o.subch:
-					o.do_sub(sub)
-				default:
-					goto done_sub
-				}
-			}
-		done_sub:
 			select {
 			case <-o.ctx.Done():
 				return
@@ -80,11 +69,10 @@ func (o *Bus) pub(m *Msg) {
 						}
 					}
 				} else {
+
 					select {
 					case <-o.ctx.Done():
-						return
-					default:
-						ch <- m
+					case ch <- m:
 					}
 				}
 			}
@@ -98,14 +86,12 @@ func (o *Bus) loop() {
 		select {
 		case <-o.ctx.Done():
 			return
-		default:
-			select {
-			case <-o.ctx.Done():
-				return
-			case msg := <-o.ch:
-				o.pub(msg)
-			case sub := <-o.subch:
-				o.do_sub(sub)
+		case i := <-o.ch:
+			switch t := i.(type) {
+			case *Msg:
+				o.pub(t)
+			case *subscription:
+				o.do_sub(t)
 			}
 		}
 	}
@@ -174,11 +160,11 @@ type subscription struct {
 }
 
 func (o *Bus) Subscribe(c chan *Msg, topics ...string) {
-	o.subch <- &subscription{topics: topics, c: c, on: true}
+	o.ch <- &subscription{topics: topics, c: c, on: true}
 }
 
 func (o *Bus) Unsubscribe(c chan *Msg, topics ...string) {
-	o.subch <- &subscription{topics: topics, c: c}
+	o.ch <- &subscription{topics: topics, c: c}
 }
 
 type Msg struct {
