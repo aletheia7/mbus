@@ -6,11 +6,12 @@ package mbus
 
 import (
 	"context"
-	"github.com/aletheia7/sd"
-	"github.com/k-sone/critbitgo"
 	"strconv"
 	"sync/atomic"
 	"time"
+
+	"github.com/aletheia7/sd/v6"
+	"github.com/k-sone/critbitgo"
 )
 
 var j = sd.New()
