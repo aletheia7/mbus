@@ -10,11 +10,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/aletheia7/sd/v6"
 	"github.com/k-sone/critbitgo"
 )
-
-var j = sd.New()
 
 const (
 	Sub_channel_prefix   = "sub_"
@@ -28,13 +25,19 @@ type Bus struct {
 	ch                  chan interface{}
 	topic_ct            int64
 	trie                *critbitgo.Trie
+	w                   interface{}
 }
 
-func New_bus(ctx context.Context) *Bus {
+type Warner interface {
+	Warning(a ...interface{})
+}
+
+func New_bus(ctx context.Context, warner interface{}) *Bus {
 	r := &Bus{
 		ctx:  ctx,
 		ch:   make(chan interface{}, 256),
 		trie: critbitgo.NewTrie(),
+		w:    warner,
 	}
 	go r.loop()
 	return r
@@ -64,7 +67,9 @@ func (o *Bus) pub(m *Msg) {
 						case ch <- m:
 						case <-time.After(pub_timer_fail):
 							if v, ok := o.trie.Get([]byte(m.Topic)); ok && v.(map[chan *Msg]bool)[ch] {
-								j.Warning("cannot pub, increase chan size:", len(ch), ch, m.Topic)
+								if w, ok := o.w.(Warner); ok {
+									w.Warning("cannot pub, increase chan size:", len(ch), ch, m.Topic)
+								}
 								o.do_sub(&subscription{topics: []string{m.Topic}, c: ch})
 							}
 						}
